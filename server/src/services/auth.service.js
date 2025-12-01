@@ -8,12 +8,12 @@ class AuthService {
     const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
-      throw new AppError("Credenciales inválidas.", 401);
+      throw new AppError("Invalid Credentials.", 401);
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new AppError("Credenciales inválidas.", 401);
+      throw new AppError("Invalid Credentials.", 401);
     }
 
     return this.generateToken(user);
@@ -22,7 +22,7 @@ class AuthService {
   static async register(userData) {
     const existingUser = await User.findOne({ email: userData.email });
     if (existingUser) {
-      throw new AppError("El email ya está registrado.", 409);
+      throw new AppError("Email already in use.", 409);
     }
 
     const hashedPassword = await bcrypt.hash(userData.password, 10);
