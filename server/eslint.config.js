@@ -3,7 +3,7 @@ import globals from "globals";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 
-module.exports = [
+export default [
   js.configs.recommended,
   {
     ignores: ["node_modules/", "coverage/", "dist/", ".git/"],
