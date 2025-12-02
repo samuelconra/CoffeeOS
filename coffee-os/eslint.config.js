@@ -1,41 +1,58 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
-import prettierConfig from "eslint-config-prettier";
+import js from "@eslint/js";
+import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import react from "eslint-plugin-react";
+import { defineConfig, globalIgnores } from "eslint/config";
 import prettierPlugin from "eslint-plugin-prettier";
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(["dist"]),
   {
-    files: ['**/*.{js,jsx}'],
-    extends: [
-      js.configs.recommended,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-    ],
+    files: ["**/*.{js,jsx}"],
+
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
+    extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
       parserOptions: {
-        ecmaVersion: 'latest',
+        ecmaVersion: "latest",
         ecmaFeatures: { jsx: true },
-        sourceType: 'module',
+        sourceType: "module",
       },
     },
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+      react: react,
+      prettier: prettierPlugin,
+    },
     rules: {
-      ...prettierConfig.rules,
+      ...js.configs.recommended.rules,
+
+      ...react.configs.recommended.rules,
+      ...react.configs["jsx-runtime"].rules,
+
+      ...reactHooks.configs.recommended.rules,
+
       "prettier/prettier": "error",
 
       "eol-last": ["error", "always"],
-
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "no-console": "warn",
       eqeqeq: ["error", "always"],
       curly: ["error", "all"],
       "no-var": "error",
       "prefer-const": "error",
+
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+
+      "react/prop-types": "off",
     },
   },
-])
+]);

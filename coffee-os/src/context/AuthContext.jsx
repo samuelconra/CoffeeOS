@@ -1,59 +1,78 @@
-import { createContext, useState, useEffect } from 'react';
-import { loginUser, signupUser } from '../api/authService';
+import { createContext, useState, useEffect } from "react";
+import { loginUser, signupUser } from "../api/authService";
 
-const AuthContext = createContext();
+export const AuthContext = createContext();
 
-function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const initializeAuth = async () => {
-            try {
-                const storedUser = localStorage.getItem('user');
-                if (storedUser) {
-                    setUser(JSON.parse(storedUser));
-                }
-            } catch (error) {
-                console.error("Failed to parse user from localStorage", error);
-                localStorage.removeItem('user');
-            }
-            setLoading(false);
-        };
-        
-        initializeAuth();
-    }, []);
-
-    const login = async (email, password) => {
-        const userData = await loginUser(email, password);
-        localStorage.setItem('user', JSON.stringify(userData.user));
-        setUser(userData.user);
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.error("Failed to parse user from localStorage", error);
+        localStorage.removeItem("user");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const signup = async (username, fullName, email, password) => {
-        const userData = await signupUser(username, fullName, email, password);
-        localStorage.setItem('user', JSON.stringify(userData.user));
-        setUser(userData.user);
-    };
+    initializeAuth();
+  }, []);
 
-    const logout = () => {
-        localStorage.removeItem('user');
-        setUser(null);
-    };
+  const login = async (email, password) => {
+    try {
+      const response = await loginUser(email, password);
+      const userToStore = {
+        ...response.user,
+        token: response.token,
+      };
 
-    const value = {
-        user,
-        loading,
-        login,
-        signup,
-        logout,
-    };
-
-    if (loading) {
-        return null;
+      localStorage.setItem("user", JSON.stringify(userToStore));
+      setUser(userToStore);
+      return userToStore;
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
     }
+  };
 
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+  const signup = async (username, fullName, email, password) => {
+    try {
+      const response = await signupUser(username, fullName, email, password);
+      if (response.token) {
+        const userToStore = {
+          ...response.user,
+          token: response.token,
+        };
+        localStorage.setItem("user", JSON.stringify(userToStore));
+        setUser(userToStore);
+      }
+      return response;
+    } catch (error) {
+      console.error("Signup error:", error);
+      throw error;
+    }
+  };
 
-export { AuthContext, AuthProvider };
+  const logout = () => {
+    localStorage.removeItem("user");
+    setUser(null);
+  };
+
+  const value = {
+    user,
+    loading,
+    login,
+    signup,
+    logout,
+    isAuthenticated: !!user,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
