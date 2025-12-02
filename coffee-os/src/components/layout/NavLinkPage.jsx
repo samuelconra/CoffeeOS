@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 
-function NavbarLink({ name, route, icon: Icon }) {
+function NavLinkPage({ name, route, icon: Icon }) {
   return (
     <NavLink
       to={`/${route}`}
@@ -16,4 +16,4 @@ function NavbarLink({ name, route, icon: Icon }) {
   );
 }
 
-export default NavbarLink;
+export default NavLinkPage;
