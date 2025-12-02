@@ -91,6 +91,8 @@ export function MapPage() {
       style: "mapbox://styles/mapbox/light-v11",
       center: [-122.4194, 37.7749],
       zoom: 12,
+      pitch: 60,
+      attributionControl: false,
     });
 
     map.addControl(new mapboxgl.NavigationControl(), "top-right");

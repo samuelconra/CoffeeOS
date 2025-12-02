@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loginUser, signupUser } from "../api/authService";
-import { AuthContext } from "./AuthContext";
+import { AuthContext } from "./AuthContext.js";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -24,36 +24,28 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    try {
-      const response = await loginUser(email, password);
+    const response = await loginUser(email, password);
+    const userToStore = {
+      ...response.user,
+      token: response.token,
+    };
+
+    localStorage.setItem("user", JSON.stringify(userToStore));
+    setUser(userToStore);
+    return userToStore;
+  };
+
+  const signup = async (username, fullName, email, password) => {
+    const response = await signupUser(username, fullName, email, password);
+    if (response.token) {
       const userToStore = {
         ...response.user,
         token: response.token,
       };
-
       localStorage.setItem("user", JSON.stringify(userToStore));
       setUser(userToStore);
-      return userToStore;
-    } catch {
-      //ignore
     }
-  };
-
-  const signup = async (username, fullName, email, password) => {
-    try {
-      const response = await signupUser(username, fullName, email, password);
-      if (response.token) {
-        const userToStore = {
-          ...response.user,
-          token: response.token,
-        };
-        localStorage.setItem("user", JSON.stringify(userToStore));
-        setUser(userToStore);
-      }
-      return response;
-    } catch {
-      // ignore
-    }
+    return response;
   };
 
   const logout = () => {
