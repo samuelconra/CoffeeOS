@@ -1,5 +1,5 @@
 import { useAuth } from "../../hooks/useAuth";
-import NavbarLink from "./NavbarLink";
+import NavLinkPage from "./NavLinkPage";
 import { Coffee, Map, Leaf, LogOut } from "lucide-react";
 
 function Navbar() {
@@ -19,8 +19,8 @@ function Navbar() {
           </div>
 
           <div className="flex items-center gap-1">
-            <NavbarLink name="Map" route="" icon={Map} />
-            <NavbarLink name="Bean Origins" route="bean-origins" icon={Leaf} />
+            <NavLinkPage name="Map" route="" icon={Map} />
+            <NavLinkPage name="Bean Origins" route="bean-origins" icon={Leaf} />
             <div className="ml-2 pl-2 border-l border-gray-200/60">
               <button
                 onClick={handleLogout}
