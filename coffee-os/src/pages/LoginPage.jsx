@@ -22,7 +22,6 @@ function LoginPage() {
         return "Welcome Back!";
       },
       error: (err) => {
-        console.log(err);
         return err.message || "Error signing in.";
       },
     });

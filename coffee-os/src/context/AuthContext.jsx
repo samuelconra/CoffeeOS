@@ -1,7 +1,6 @@
-import { createContext, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { loginUser, signupUser } from "../api/authService";
-
-export const AuthContext = createContext();
+import { AuthContext } from "./AuthContext";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -14,8 +13,7 @@ export const AuthProvider = ({ children }) => {
         if (storedUser) {
           setUser(JSON.parse(storedUser));
         }
-      } catch (error) {
-        console.error("Failed to parse user from localStorage", error);
+      } catch {
         localStorage.removeItem("user");
       } finally {
         setLoading(false);
@@ -36,9 +34,8 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem("user", JSON.stringify(userToStore));
       setUser(userToStore);
       return userToStore;
-    } catch (error) {
-      console.error("Login error:", error);
-      throw error;
+    } catch {
+      //ignore
     }
   };
 
@@ -54,9 +51,8 @@ export const AuthProvider = ({ children }) => {
         setUser(userToStore);
       }
       return response;
-    } catch (error) {
-      console.error("Signup error:", error);
-      throw error;
+    } catch {
+      // ignore
     }
   };
 

@@ -270,7 +270,7 @@ export function MapPage() {
                   });
                 }
               }}
-              className="w-full p-4 border-b border-gray-200/60 hover:bg-gray-50/50 transition-colors text-left"
+              className="w-full p-4 border-b border-gray-200/60 hover:bg-gray-50/50 transition-colors text-left cursor-pointer"
             >
               <div className="flex items-start justify-between mb-2">
                 <h3 className="text-gray-900 font-medium">{shop.name}</h3>

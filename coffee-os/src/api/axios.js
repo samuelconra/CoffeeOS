@@ -18,8 +18,8 @@ api.interceptors.request.use(
         if (user?.token) {
           config.headers.Authorization = `Bearer ${user.token}`;
         }
-      } catch (e) {
-        console.error("Error parsing user from localStorage.", e);
+      } catch {
+        // ignore
       }
     }
     return config;
