@@ -9,6 +9,7 @@ import authRoutes from "./src/routes/auth.routes.js";
 import userRoutes from "./src/routes/user.routes.js";
 import coffeeShopRoutes from "./src/routes/coffeeShop.routes.js";
 import beanOriginRoutes from "./src/routes/beanOrigin.routes.js";
+import zoneRoutes from "./src/routes/zone.routes.js";
 
 dotenv.config();
 connectDB();
@@ -22,6 +23,7 @@ app.use("/auth", authRoutes);
 app.use("/users", userRoutes);
 app.use("/coffee-shops", coffeeShopRoutes);
 app.use("/beans", beanOriginRoutes);
+app.use("/zones", zoneRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome to CoffeeOS API ☕️");

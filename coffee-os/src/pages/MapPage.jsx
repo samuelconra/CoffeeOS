@@ -1,10 +1,20 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
+import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { Search, Filter, Wifi, Zap, Dog, Star, X, Pencil, Trash2, Plus } from "lucide-react";
+import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
+import { Search, Filter, Wifi, Zap, Dog, Star, X, Pencil, Trash2, Plus, MapPin } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getCoffeeShops, createCoffeeShop, updateCoffeeShop, deleteCoffeeShop } from "../api/dataService";
+import {
+  getCoffeeShops,
+  createCoffeeShop,
+  updateCoffeeShop,
+  deleteCoffeeShop,
+  getZones,
+  createZone,
+  deleteZone,
+} from "../api/dataService";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -14,6 +24,11 @@ export function MapPage() {
   const { data: shops = [], isLoading } = useQuery({
     queryKey: ["coffeeShops"],
     queryFn: getCoffeeShops,
+  });
+
+  const { data: zones = [] } = useQuery({
+    queryKey: ["zones"],
+    queryFn: getZones,
   });
 
   // CRUD Mutations
@@ -48,6 +63,36 @@ export function MapPage() {
     onError: (err) => toast.error(err.message),
   });
 
+  const createZoneMutation = useMutation({
+    mutationFn: createZone,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["zones"]);
+      toast.success("Zone created!");
+      setIsZoneModalOpen(false);
+      if (drawRef.current) {
+        drawRef.current.deleteAll();
+      }
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteZoneMutation = useMutation({
+    mutationFn: deleteZone,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["zones"]);
+      toast.success("Zone deleted!");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Estado para el modal de nueva zona
+  const [isAddMode, setIsAddMode] = useState(false);
+  const isAddModeRef = useRef(false);
+
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const [newZoneName, setNewZoneName] = useState("");
+  const [currentPolygon, setCurrentPolygon] = useState(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [vibeFilter, setVibeFilter] = useState("all");
   const [selectedShop, setSelectedShop] = useState(null);
@@ -64,6 +109,15 @@ export function MapPage() {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
+  const drawRef = useRef(null);
+
+  useEffect(() => {
+    isAddModeRef.current = isAddMode;
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.getCanvas().style.cursor = isAddMode ? "crosshair" : "";
+    }
+  }, [isAddMode]);
 
   // Filtered shops based on search & vibe
   const filteredShops = useMemo(() => {
@@ -97,7 +151,27 @@ export function MapPage() {
 
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
+    const draw = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: {
+        polygon: true,
+        trash: true,
+      },
+      defaultMode: "simple_select",
+    });
+    map.addControl(draw, "top-left");
+    drawRef.current = draw;
+
     map.on("click", (e) => {
+      if (!isAddModeRef.current) {
+        return;
+      }
+
+      const mode = draw.getMode();
+      if (mode === "draw_polygon") {
+        return;
+      }
+
       const { lng, lat } = e.lngLat;
       setNewShopCoordinates([lng, lat]);
       setEditingShop(null);
@@ -113,6 +187,84 @@ export function MapPage() {
       });
       setSelectedShop(null);
       setIsModalOpen(true);
+
+      setIsAddMode(false);
+    });
+
+    map.on("draw.create", (e) => {
+      const feature = e.features[0];
+      setCurrentPolygon(feature.geometry);
+      setNewZoneName("");
+      setIsZoneModalOpen(true);
+    });
+
+    map.on("click", "zones-fill", (e) => {
+      if (isAddModeRef.current) {
+        return;
+      }
+
+      const feature = e.features[0];
+      const zoneId = feature.properties.id;
+      const zoneName = feature.properties.name;
+
+      const polygonIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>`;
+      const trashIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
+
+      new mapboxgl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `
+            <div class="p-1 min-w-[200px]">
+              <div class="flex items-center gap-3 mb-4 pr-4">
+                <div class="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                  ${polygonIcon}
+                </div>
+                <div>
+                  <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Zone Name</p>
+                  <h3 class="font-semibold text-gray-900 text-sm leading-tight">${zoneName}</h3>
+                </div>
+              </div>
+              
+              <button 
+                id="delete-zone-btn"
+                class="flex items-center justify-center gap-2 w-full px-3 py-2 border border-red-200 bg-red-50/50 text-red-600 rounded-lg hover:bg-red-100 hover:border-red-300 transition-all duration-200 cursor-pointer text-xs font-medium"
+              >
+                ${trashIcon}
+                Delete Zone
+              </button>
+            </div>
+          `
+        )
+        .addTo(map);
+
+      setTimeout(() => {
+        const btn = document.getElementById("delete-zone-btn");
+        if (btn) {
+          btn.onclick = () => {
+            if (confirm(`Are you sure you want to delete zone "${zoneName}"?`)) {
+              deleteZoneMutation.mutate(zoneId);
+              const popup = document.getElementsByClassName("mapboxgl-popup")[0];
+              if (popup) {
+                popup.remove();
+              }
+            }
+          };
+        }
+      }, 100);
+    });
+
+    // Cambiar cursor sobre zonas
+    map.on("mouseenter", "zones-fill", () => {
+      if (!isAddModeRef.current) {
+        map.getCanvas().style.cursor = "pointer";
+      }
+    });
+    map.on("mouseleave", "zones-fill", () => {
+      if (!isAddModeRef.current) {
+        map.getCanvas().style.cursor = "";
+      } else {
+        map.getCanvas().style.cursor = "crosshair";
+      }
     });
 
     mapInstanceRef.current = map;
@@ -123,7 +275,61 @@ export function MapPage() {
     };
   }, [isLoading]);
 
-  // Update markers whenever the filteredShops change
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) {
+      return;
+    }
+
+    // Esperar a que el estilo cargue antes de añadir capas
+    if (!map.isStyleLoaded()) {
+      map.once("style.load", renderZones);
+    } else {
+      renderZones();
+    }
+
+    function renderZones() {
+      const source = map.getSource("zones-source");
+      const geoJsonData = {
+        type: "FeatureCollection",
+        features: zones.map((z) => ({
+          type: "Feature",
+          properties: { id: z._id, name: z.name },
+          geometry: z.location,
+        })),
+      };
+
+      if (source) {
+        source.setData(geoJsonData);
+      } else {
+        map.addSource("zones-source", {
+          type: "geojson",
+          data: geoJsonData,
+        });
+
+        map.addLayer({
+          id: "zones-fill",
+          type: "fill",
+          source: "zones-source",
+          paint: {
+            "fill-color": "#a4bee1",
+            "fill-opacity": 0.3,
+          },
+        });
+
+        map.addLayer({
+          id: "zones-line",
+          type: "line",
+          source: "zones-source",
+          paint: {
+            "line-color": "#1c398e",
+            "line-width": 2,
+          },
+        });
+      }
+    }
+  }, [zones]);
+
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) {
@@ -169,7 +375,6 @@ export function MapPage() {
     });
   }, [filteredShops]);
 
-  // Edit shop
   const handleEdit = (shop) => {
     setEditingShop(shop);
     setFormData({ ...shop });
@@ -213,6 +418,25 @@ export function MapPage() {
     setFormData({ amenities: { hasWifi: false, hasPowerOutlets: false, isPetFriendly: false } });
   };
 
+  const handleZoneSubmit = (e) => {
+    e.preventDefault();
+    if (!currentPolygon) {
+      return;
+    }
+
+    createZoneMutation.mutate({
+      name: newZoneName,
+      location: currentPolygon,
+    });
+  };
+
+  const cancelZoneCreation = () => {
+    setIsZoneModalOpen(false);
+    if (drawRef.current) {
+      drawRef.current.deleteAll();
+    }
+  };
+
   if (isLoading) {
     return <div className="p-8 text-center">Loading map data...</div>;
   }
@@ -249,12 +473,26 @@ export function MapPage() {
             </select>
           </div>
 
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-            <p className="text-blue-900 text-sm">
-              <Plus className="size-4 inline mr-1" />
-              Click anywhere on the map to add a new coffee shop
-            </p>
-          </div>
+          <button
+            onClick={() => setIsAddMode(!isAddMode)}
+            className={`w-full p-4 rounded-lg border transition-all flex items-center justify-center gap-2 font-medium cursor-pointer ${
+              isAddMode
+                ? "bg-gray-900 text-white border-gray-900 ring-2 ring-offset-2 ring-gray-900"
+                : "bg-blue-50 text-blue-900 border-blue-100 hover:bg-blue-100"
+            }`}
+          >
+            {isAddMode ? (
+              <>
+                <MapPin className="size-5" />
+                Click map to place shop
+              </>
+            ) : (
+              <>
+                <Plus className="size-5" />
+                Add New Coffee Shop
+              </>
+            )}
+          </button>
         </div>
 
         {/* Coffee Shop List */}
@@ -377,6 +615,40 @@ export function MapPage() {
                 <Trash2 className="size-4" />
                 Delete
               </button>
+            </div>
+          </div>
+        )}
+
+        {isZoneModalOpen && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Name this Zone</h3>
+              <form onSubmit={handleZoneSubmit} className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="e.g., Downtown District"
+                  value={newZoneName}
+                  onChange={(e) => setNewZoneName(e.target.value)}
+                  required
+                  autoFocus
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={cancelZoneCreation}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    Save Zone
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

@@ -41,3 +41,19 @@ export const deleteBeanOrigin = async (id) => {
   await api.delete(`/beans/${id}`);
   return id;
 };
+
+// --- Zones ---
+export const getZones = async () => {
+  const response = await api.get("/zones");
+  return response.data.zones;
+};
+
+export const createZone = async (data) => {
+  const response = await api.post("/zones", data);
+  return response.data.zone;
+};
+
+export const deleteZone = async (id) => {
+  await api.delete(`/zones/${id}`);
+  return id;
+};
