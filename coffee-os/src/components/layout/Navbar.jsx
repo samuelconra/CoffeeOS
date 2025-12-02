@@ -1,5 +1,5 @@
 import { useAuth } from "../../hooks/useAuth";
-import NavbarLink from "./NavBarLink";
+import NavbarLink from "./NavbarLink";
 import { Coffee, Map, Leaf, LogOut } from "lucide-react";
 
 function Navbar() {
