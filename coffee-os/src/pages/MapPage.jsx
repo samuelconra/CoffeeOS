@@ -2,13 +2,52 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Search, Filter, Wifi, Zap, Dog, Star, X, Pencil, Trash2, Plus } from "lucide-react";
-import { mockCoffeeShops } from "../data/mockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import { getCoffeeShops, createCoffeeShop, updateCoffeeShop, deleteCoffeeShop } from "../api/dataService";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 export function MapPage() {
-  // Shops data
-  const [shops, setShops] = useState(mockCoffeeShops);
+  const queryClient = useQueryClient();
+
+  const { data: shops = [], isLoading } = useQuery({
+    queryKey: ["coffeeShops"],
+    queryFn: getCoffeeShops,
+  });
+
+  // CRUD Mutations
+  const createMutation = useMutation({
+    mutationFn: createCoffeeShop,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["coffeeShops"]);
+      toast.success("Coffee Shop created!");
+      closeModal();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateCoffeeShop,
+    onSuccess: (updatedShop) => {
+      queryClient.invalidateQueries(["coffeeShops"]);
+      toast.success("Coffee Shop updated!");
+      setSelectedShop(updatedShop);
+      closeModal();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteCoffeeShop,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["coffeeShops"]);
+      toast.success("Coffee Shop deleted!");
+      setSelectedShop(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [vibeFilter, setVibeFilter] = useState("all");
   const [selectedShop, setSelectedShop] = useState(null);
@@ -31,7 +70,8 @@ export function MapPage() {
     return shops.filter((shop) => {
       const matchesSearch =
         shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        shop.address.toLowerCase().includes(searchQuery.toLowerCase());
+        shop.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        "";
       const matchesVibe = vibeFilter === "all" || shop.vibe === vibeFilter;
       return matchesSearch && matchesVibe;
     });
@@ -39,6 +79,9 @@ export function MapPage() {
 
   // Initialize Mapbox map once
   useEffect(() => {
+    if (isLoading || !mapContainerRef.current) {
+      return;
+    }
     if (mapInstanceRef.current) {
       return;
     }
@@ -52,7 +95,6 @@ export function MapPage() {
 
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-    // Modal Opening
     map.on("click", (e) => {
       const { lng, lat } = e.lngLat;
       setNewShopCoordinates([lng, lat]);
@@ -65,7 +107,7 @@ export function MapPage() {
         slug: "",
         description: "",
         address: "",
-        vibe: "",
+        vibe: "Focus",
       });
       setSelectedShop(null);
       setIsModalOpen(true);
@@ -77,7 +119,7 @@ export function MapPage() {
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, []);
+  }, [isLoading]);
 
   // Update markers whenever the filteredShops change
   useEffect(() => {
@@ -86,20 +128,14 @@ export function MapPage() {
       return;
     }
 
-    markersRef.current.forEach((m) => {
-      try {
-        if (m.getElement) {
-          m.getElement().removeEventListener("click", m._clickHandler);
-        }
-        m.remove();
-      } catch {
-        // ignore
-      }
-    });
+    markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Create new markers for filteredShops
     filteredShops.forEach((shop) => {
+      if (!shop.location || !shop.location.coordinates) {
+        return;
+      }
+
       const lng = shop.location.coordinates[0];
       const lat = shop.location.coordinates[1];
 
@@ -107,7 +143,7 @@ export function MapPage() {
       el.className = "custom-marker cursor-pointer";
 
       const inner = document.createElement("div");
-      inner.className = "transition-transform duration-200 hover:scale-110";
+      inner.className = "transition-transform duration-200 hover:scale-110 text-gray-900";
       inner.innerHTML = `
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -127,22 +163,9 @@ export function MapPage() {
 
       const marker = new mapboxgl.Marker({ element: el, anchor: "bottom" }).setLngLat([lng, lat]).addTo(map);
 
-      marker._clickHandler = clickHandler;
       markersRef.current.push(marker);
     });
   }, [filteredShops]);
-
-  // Handlers for sidebar shop click
-  const handleShopClick = (shop) => {
-    setSelectedShop(shop);
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo({
-        center: [shop.location.coordinates[0], shop.location.coordinates[1]],
-        zoom: 14,
-        essential: true,
-      });
-    }
-  };
 
   // Edit shop
   const handleEdit = (shop) => {
@@ -155,8 +178,7 @@ export function MapPage() {
   // Delete shop
   const handleDelete = (id) => {
     if (confirm("Are you sure you want to delete this coffee shop?")) {
-      setShops((prev) => prev.filter((s) => s._id !== id));
-      setSelectedShop(null);
+      deleteMutation.mutate(id);
     }
   };
 
@@ -164,36 +186,22 @@ export function MapPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (editingShop) {
-      // Update existing
-      setShops((prev) => prev.map((s) => (s._id === editingShop._id ? { ...editingShop, ...formData } : s)));
-      if (selectedShop && editingShop._id === selectedShop._id) {
-        setSelectedShop({ ...selectedShop, ...formData });
-      }
-    } else {
-      // Create new shop
-      const newShop = {
-        ...formData,
-        _id: "1",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        location:
-          formData.location?.coordinates?.length === 2
-            ? formData.location
-            : newShopCoordinates
-              ? { type: "Point", coordinates: newShopCoordinates }
-              : { type: "Point", coordinates: [0, 0] },
-        amenities: formData.amenities || {
-          hasWifi: false,
-          hasPowerOutlets: false,
-          isPetFriendly: false,
-        },
-        rating: formData.rating ?? 5,
-      };
-      setShops((prev) => [...prev, newShop]);
-    }
+    const dataToSubmit = {
+      ...formData,
+      location:
+        formData.location?.coordinates?.length === 2
+          ? formData.location
+          : newShopCoordinates
+            ? { type: "Point", coordinates: newShopCoordinates }
+            : { type: "Point", coordinates: [0, 0] },
+      rating: parseFloat(formData.rating ?? 5),
+    };
 
-    closeModal();
+    if (editingShop) {
+      updateMutation.mutate({ id: editingShop._id, data: dataToSubmit });
+    } else {
+      createMutation.mutate(dataToSubmit);
+    }
   };
 
   const closeModal = () => {
@@ -203,11 +211,14 @@ export function MapPage() {
     setFormData({ amenities: { hasWifi: false, hasPowerOutlets: false, isPetFriendly: false } });
   };
 
+  if (isLoading) {
+    return <div className="p-8 text-center">Loading map data...</div>;
+  }
+
   return (
     <div className="h-[calc(100vh-64px)] flex">
       {/* Sidebar */}
       <div className="w-[400px] bg-white border-r border-gray-200/60 flex flex-col z-10 relative shadow-xl">
-        {/* Search and Filters */}
         <div className="p-6 border-b border-gray-200/60 space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
@@ -236,9 +247,8 @@ export function MapPage() {
             </select>
           </div>
 
-          {/* Instructions */}
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-            <p className="text-blue-900">
+            <p className="text-blue-900 text-sm">
               <Plus className="size-4 inline mr-1" />
               Click anywhere on the map to add a new coffee shop
             </p>
@@ -250,7 +260,16 @@ export function MapPage() {
           {filteredShops.map((shop) => (
             <button
               key={shop._id}
-              onClick={() => handleShopClick(shop)}
+              onClick={() => {
+                setSelectedShop(shop);
+                if (mapInstanceRef.current && shop.location) {
+                  mapInstanceRef.current.flyTo({
+                    center: [shop.location.coordinates[0], shop.location.coordinates[1]],
+                    zoom: 14,
+                    essential: true,
+                  });
+                }
+              }}
               className="w-full p-4 border-b border-gray-200/60 hover:bg-gray-50/50 transition-colors text-left"
             >
               <div className="flex items-start justify-between mb-2">
@@ -321,19 +340,19 @@ export function MapPage() {
             </div>
 
             <div className="flex items-center gap-4 pt-4 border-t border-gray-100">
-              {selectedShop.amenities.hasWifi && (
+              {selectedShop.amenities?.hasWifi && (
                 <div className="flex items-center gap-1.5 text-gray-600 text-sm" title="WiFi Available">
                   <Wifi className="size-4" />
                   <span>WiFi</span>
                 </div>
               )}
-              {selectedShop.amenities.hasPowerOutlets && (
+              {selectedShop.amenities?.hasPowerOutlets && (
                 <div className="flex items-center gap-1.5 text-gray-600 text-sm" title="Power Outlets">
                   <Zap className="size-4" />
                   <span>Power</span>
                 </div>
               )}
-              {selectedShop.amenities.isPetFriendly && (
+              {selectedShop.amenities?.isPetFriendly && (
                 <div className="flex items-center gap-1.5 text-gray-600 text-sm" title="Pet Friendly">
                   <Dog className="size-4" />
                   <span>Pets</span>
@@ -361,7 +380,7 @@ export function MapPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal  */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -415,6 +434,7 @@ export function MapPage() {
                 />
               </div>
 
+              {/* Coordinates */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-gray-700 mb-2">Longitude *</label>
@@ -437,7 +457,6 @@ export function MapPage() {
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900/20 transition-all"
                   />
                 </div>
-
                 <div>
                   <label className="block text-gray-700 mb-2">Latitude *</label>
                   <input
@@ -461,6 +480,7 @@ export function MapPage() {
                 </div>
               </div>
 
+              {/* Vibe and Rating */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-gray-700 mb-2">Vibe</label>
@@ -477,7 +497,6 @@ export function MapPage() {
                     <option value="Chill">Chill</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-gray-700 mb-2">Rating</label>
                   <input
@@ -492,6 +511,7 @@ export function MapPage() {
                 </div>
               </div>
 
+              {/* Amenities */}
               <div>
                 <label className="block text-gray-700 mb-3">Amenities</label>
                 <div className="space-y-2">
@@ -540,19 +560,25 @@ export function MapPage() {
                 </div>
               </div>
 
+              {/* Actions */}
               <div className="flex items-center gap-3 pt-4 border-t border-gray-200/60">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 px-4 py-2.5 border border-gray-200/60 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+                  className="flex-1 px-4 py-2.5 border border-gray-200/60 rounded-lg hover:bg-gray-50 transition-colors text-gray-700 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {editingShop ? "Update" : "Create"}
+                  {createMutation.isPending || updateMutation.isPending
+                    ? "Saving..."
+                    : editingShop
+                      ? "Update"
+                      : "Create"}
                 </button>
               </div>
             </form>

@@ -1,9 +1,57 @@
 import { useState, useMemo } from "react";
 import { Plus, Pencil, Trash2, X, Search, Filter } from "lucide-react";
-import { mockBeanOrigins, mockCoffeeShops } from "../data/MockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import {
+  getBeanOrigins,
+  createBeanOrigin,
+  updateBeanOrigin,
+  deleteBeanOrigin,
+  getCoffeeShops,
+} from "../api/dataService";
 
 function BeanOriginsPage() {
-  const [beans, setBeans] = useState(mockBeanOrigins);
+  const queryClient = useQueryClient();
+
+  const { data: beans = [], isLoading: isLoadingBeans } = useQuery({
+    queryKey: ["beanOrigins"],
+    queryFn: getBeanOrigins,
+  });
+
+  const { data: coffeeShops = [] } = useQuery({
+    queryKey: ["coffeeShops"],
+    queryFn: getCoffeeShops,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createBeanOrigin,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["beanOrigins"]);
+      toast.success("Bean Origin created!");
+      closeModal();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateBeanOrigin,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["beanOrigins"]);
+      toast.success("Bean Origin updated!");
+      closeModal();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteBeanOrigin,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["beanOrigins"]);
+      toast.success("Bean Origin deleted!");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBean, setEditingBean] = useState(null);
   const [formData, setFormData] = useState({});
@@ -26,34 +74,34 @@ function BeanOriginsPage() {
 
   const handleEdit = (bean) => {
     setEditingBean(bean);
-    setFormData(bean);
+    const formValues = {
+      ...bean,
+      coffeeShopId: typeof bean.coffeeShopId === "object" ? bean.coffeeShopId?._id : bean.coffeeShopId,
+    };
+    setFormData(formValues);
     setIsModalOpen(true);
   };
 
   const handleDelete = (id) => {
     if (confirm("Are you sure you want to delete this bean origin?")) {
-      setBeans(beans.filter((bean) => bean._id !== id));
+      deleteMutation.mutate(id);
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (editingBean) {
-      // Update existing bean
-      setBeans(beans.map((bean) => (bean._id === editingBean._id ? { ...formData } : bean)));
-    } else {
-      // Add new bean
-      const newBean = {
-        ...formData,
-        _id: "2",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setBeans([...beans, newBean]);
-    }
+    const dataToSubmit = {
+      ...formData,
+      altitude: formData.altitude ? Number(formData.altitude) : undefined,
+      priceCup: formData.priceCup ? Number(formData.priceCup) : undefined,
+    };
 
-    closeModal();
+    if (editingBean) {
+      updateMutation.mutate({ id: editingBean._id, data: dataToSubmit });
+    } else {
+      createMutation.mutate(dataToSubmit);
+    }
   };
 
   const closeModal = () => {
@@ -62,9 +110,17 @@ function BeanOriginsPage() {
     setFormData({});
   };
 
-  const getCoffeeShopName = (id) => {
-    return mockCoffeeShops.find((shop) => shop._id === id)?.name || "Unknown";
+  const getCoffeeShopName = (shopData) => {
+    if (shopData && typeof shopData === "object" && shopData.name) {
+      return shopData.name;
+    }
+    const found = coffeeShops.find((s) => s._id === shopData);
+    return found ? found.name : "Unknown";
   };
+
+  if (isLoadingBeans) {
+    return <div className="p-8 text-center">Loading bean origins...</div>;
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto px-8 py-8">
@@ -75,7 +131,11 @@ function BeanOriginsPage() {
           <p className="text-gray-600">Manage your coffee bean origins and varieties</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingBean(null);
+            setFormData({});
+            setIsModalOpen(true);
+          }}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
         >
           <Plus className="size-5" />
@@ -144,56 +204,64 @@ function BeanOriginsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredBeans.map((bean) => (
-                <tr key={bean._id} className="border-b border-gray-200/60 hover:bg-gray-50/30 transition-colors">
-                  <td className="px-6 py-4 text-gray-900">{bean.name}</td>
-                  <td className="px-6 py-4 text-gray-600">{bean.roaster}</td>
-                  <td className="px-6 py-4 text-gray-600">{bean.originRegion || "—"}</td>
-                  <td className="px-6 py-4">
-                    {bean.process && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 text-blue-700">
-                        {bean.process}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {bean.roastLevel && (
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-md ${
-                          bean.roastLevel === "Light"
-                            ? "bg-amber-50 text-amber-700"
-                            : bean.roastLevel === "Medium"
-                              ? "bg-orange-50 text-orange-700"
-                              : "bg-gray-800 text-white"
-                        }`}
-                      >
-                        {bean.roastLevel}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{bean.altitude ? `${bean.altitude}m` : "—"}</td>
-                  <td className="px-6 py-4 text-gray-600">{bean.priceCup ? `$${bean.priceCup.toFixed(2)}` : "—"}</td>
-                  <td className="px-6 py-4 text-gray-600">{getCoffeeShopName(bean.coffeeShopId)}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleEdit(bean)}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="size-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(bean._id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
+              {filteredBeans.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="text-center py-8 text-gray-500">
+                    No beans found.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredBeans.map((bean) => (
+                  <tr key={bean._id} className="border-b border-gray-200/60 hover:bg-gray-50/30 transition-colors">
+                    <td className="px-6 py-4 text-gray-900">{bean.name}</td>
+                    <td className="px-6 py-4 text-gray-600">{bean.roaster}</td>
+                    <td className="px-6 py-4 text-gray-600">{bean.originRegion || "—"}</td>
+                    <td className="px-6 py-4">
+                      {bean.process && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 text-blue-700">
+                          {bean.process}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {bean.roastLevel && (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-md ${
+                            bean.roastLevel === "Light"
+                              ? "bg-amber-50 text-amber-700"
+                              : bean.roastLevel === "Medium"
+                                ? "bg-orange-50 text-orange-700"
+                                : "bg-gray-800 text-white"
+                          }`}
+                        >
+                          {bean.roastLevel}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{bean.altitude ? `${bean.altitude}m` : "—"}</td>
+                    <td className="px-6 py-4 text-gray-600">{bean.priceCup ? `$${bean.priceCup.toFixed(2)}` : "—"}</td>
+                    <td className="px-6 py-4 text-gray-600">{getCoffeeShopName(bean.coffeeShopId)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEdit(bean)}
+                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(bean._id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -281,7 +349,7 @@ function BeanOriginsPage() {
                   <input
                     type="number"
                     value={formData.altitude || ""}
-                    onChange={(e) => setFormData({ ...formData, altitude: parseInt(e.target.value) || undefined })}
+                    onChange={(e) => setFormData({ ...formData, altitude: e.target.value })}
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900/20 transition-all"
                   />
                 </div>
@@ -292,7 +360,7 @@ function BeanOriginsPage() {
                     type="number"
                     step="0.01"
                     value={formData.priceCup || ""}
-                    onChange={(e) => setFormData({ ...formData, priceCup: parseFloat(e.target.value) || undefined })}
+                    onChange={(e) => setFormData({ ...formData, priceCup: e.target.value })}
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900/20 transition-all"
                   />
                 </div>
@@ -307,7 +375,7 @@ function BeanOriginsPage() {
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900/20 transition-all"
                 >
                   <option value="">Select coffee shop</option>
-                  {mockCoffeeShops.map((shop) => (
+                  {coffeeShops.map((shop) => (
                     <option key={shop._id} value={shop._id}>
                       {shop.name}
                     </option>
@@ -319,15 +387,20 @@ function BeanOriginsPage() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 px-4 py-2.5 border border-gray-200/60 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+                  className="flex-1 px-4 py-2.5 border border-gray-200/60 rounded-lg hover:bg-gray-50 transition-colors text-gray-700 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {editingBean ? "Update" : "Create"}
+                  {createMutation.isPending || updateMutation.isPending
+                    ? "Saving..."
+                    : editingBean
+                      ? "Update"
+                      : "Create"}
                 </button>
               </div>
             </form>
