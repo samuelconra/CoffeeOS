@@ -23,3 +23,5 @@ router.patch("/:id", handleAsync(controller.updateBeanOrigin));
 router.delete("/:id", handleAsync(controller.deleteBeanOrigin));
 
 export default router;
+
+//comenatrio de commit
